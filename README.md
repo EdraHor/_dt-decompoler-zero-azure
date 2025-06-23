@@ -38,3 +38,6 @@ Edit the JSON and compile back to apply changes.
 
 - Python 3.6+
 - No external dependencies
+
+## Community
+Join our [Discord community](https://discord.com/invite/sGzmvFaFAe) for support and discussions about game modding and translations.
