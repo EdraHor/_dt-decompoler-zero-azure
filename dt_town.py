@@ -53,41 +53,41 @@ def decompile_dt(dt_path, json_path, test_compilation=False):
 
     print(f"File size: {len(original_data)} bytes")
 
-    # Читаем структуру
+    # Read structure
     header_size = read_file_header(original_data)
 
-    # Читаем offset'ы из заголовка
-    header_offsets = read_offsets_from_block(original_data, 2)  # пропускаем первые 2 байта (размер)
-    header_offsets = header_offsets[:(header_size - 2) // 2]  # только нужное количество
+    # Read offsets from header
+    header_offsets = read_offsets_from_block(original_data, 2)  # skip first 2 bytes (size)
+    header_offsets = header_offsets[:(header_size - 2) // 2]  # only needed amount
 
     first_offset = header_offsets[0]
     metadata_block = original_data[header_size:first_offset]
 
-    # Читаем offset'ы из блока метаданных
+    # Read offsets from metadata block
     metadata_offsets = read_offsets_from_block(metadata_block)
 
     print(f"Header: {header_size} bytes, Metadata: {len(metadata_block)} bytes")
     print(f"Header offsets: {len(header_offsets)}, Metadata offsets: {len(metadata_offsets)}")
 
-    # Объединяем ВСЕ offset'ы и сортируем их
+    # Combine ALL offsets and sort them
     all_offsets = header_offsets + metadata_offsets
-    all_offsets = sorted(set(all_offsets))  # убираем дубликаты и сортируем
+    all_offsets = sorted(set(all_offsets))  # remove duplicates and sort
 
     print(f"Total unique offsets: {len(all_offsets)}")
 
-    # Извлекаем ВСЕ строки по всем offset'ам (включая пустые)
+    # Extract ALL strings from all offsets (including empty ones)
     all_strings = []
     for offset in all_offsets:
         text = extract_string_at_offset(original_data, offset)
         all_strings.append(text)
 
-    # Подсчитываем статистику
+    # Count statistics
     non_empty = [s for s in all_strings if s.strip()]
     empty_count = len(all_strings) - len(non_empty)
 
     print(f"Extracted {len(all_strings)} strings total ({len(non_empty)} non-empty, {empty_count} empty)")
 
-    # Создаем простую JSON структуру
+    # Create simple JSON structure
     result = {
         "file_info": {
             "original_size": len(original_data),
@@ -122,39 +122,39 @@ def compile_dt(json_path, dt_path):
     print(f"Original size: {data['file_info']['original_size']} bytes")
     print(f"Strings to compile: {len(data['strings'])}")
 
-    # Начинаем строить файл
+    # Start building file
     result_data = bytearray()
 
-    # Резервируем место под заголовок
+    # Reserve space for header
     header_size = data['structure']['header_size']
     result_data.extend(b'\x00' * header_size)
 
-    # Резервируем место под блок метаданных
+    # Reserve space for metadata block
     metadata_size = len(bytes.fromhex(data['structure']['metadata_hex']))
     result_data.extend(b'\x00' * metadata_size)
 
-    # Записываем ВСЕ строки подряд и собираем новые offset'ы
+    # Write ALL strings sequentially and collect new offsets
     new_offsets = []
 
     for i, text in enumerate(data['strings']):
         current_offset = len(result_data)
         new_offsets.append(current_offset)
 
-        # Кодируем строку + null terminator + padding null
+        # Encode string + null terminator + padding null
         encoded_text = text.encode(data['file_info']['encoding']) + b'\x00\x00'
 
         result_data.extend(encoded_text)
 
     print(f"Built {len(new_offsets)} strings, total size: {len(result_data)} bytes")
 
-    # Разделяем offset'ы обратно на header и metadata блоки
+    # Split offsets back into header and metadata blocks
     header_offset_count = data['structure']['header_offset_count']
     metadata_offset_count = data['structure']['metadata_offset_count']
 
     header_offsets = new_offsets[:header_offset_count]
     metadata_offsets = new_offsets[header_offset_count:header_offset_count + metadata_offset_count]
 
-    # Дополняем если нужно
+    # Pad if needed
     while len(header_offsets) < header_offset_count:
         header_offsets.append(len(result_data))
     while len(metadata_offsets) < metadata_offset_count:
@@ -162,7 +162,7 @@ def compile_dt(json_path, dt_path):
 
     print(f"Header offsets: {len(header_offsets)}, Metadata offsets: {len(metadata_offsets)}")
 
-    # Строим заголовок
+    # Build header
     header = bytearray()
     header.extend(struct.pack('<H', header_size))
 
@@ -172,11 +172,11 @@ def compile_dt(json_path, dt_path):
             offset = 0xFFFF
         header.extend(struct.pack('<H', offset))
 
-    # Дополняем заголовок нулями
+    # Pad header with zeros
     while len(header) < header_size:
         header.append(0)
 
-    # Строим блок метаданных
+    # Build metadata block
     metadata = bytearray()
     for offset in metadata_offsets:
         if offset > 0xFFFF:
@@ -184,15 +184,15 @@ def compile_dt(json_path, dt_path):
             offset = 0xFFFF
         metadata.extend(struct.pack('<H', offset))
 
-    # Дополняем метаданные нулями
+    # Pad metadata with zeros
     while len(metadata) < metadata_size:
         metadata.append(0)
 
-    # Записываем заголовок и метаданные
+    # Write header and metadata
     result_data[:header_size] = header
     result_data[header_size:header_size + metadata_size] = metadata
 
-    # Сохраняем файл
+    # Save file
     with open(dt_path, 'wb') as f:
         f.write(result_data)
 
@@ -220,7 +220,7 @@ def test_compilation_process(dt_path, json_path, original_data):
             print(f"  Compiled: {len(compiled_data)} bytes")
             print(f"  Difference: {len(compiled_data) - len(original_data):+d} bytes")
 
-            # Найти первое различие
+            # Find first difference
             min_len = min(len(original_data), len(compiled_data))
             for i in range(min_len):
                 if original_data[i] != compiled_data[i]:

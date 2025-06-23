@@ -7,7 +7,7 @@ from pathlib import Path
 import argparse
 import struct
 
-# Фиксированная кодировка для игры
+# Fixed encoding for the game
 GAME_ENCODING = 'shift-jis'
 ITEM_EXTENSION = '._dt'
 JSON_EXTENSION = '.json'
@@ -77,16 +77,16 @@ def analyze_file_structure(file_data):
 
     header_size = struct.unpack('<H', file_data[0:2])[0]
     print(f"  Detected header size: {header_size} bytes")
-    
-    # Проверяем, что размер заголовка разумный
+
+    # Check that header size is reasonable
     if header_size < 4 or header_size > len(file_data):
         raise ValueError(f"Invalid header size: {header_size}")
-    
+
     if len(file_data) < header_size:
         raise ValueError(f"File too small for declared header size {header_size}")
 
-    # Вычисляем количество offset'ов в заголовке
-    # Первые 2 байта - размер заголовка, остальные - offset'ы по 2 байта каждый
+    # Calculate number of offsets in header
+    # First 2 bytes - header size, rest are offsets (2 bytes each)
     num_offsets = (header_size - 2) // 2
     print(f"  Number of metadata offsets: {num_offsets}")
 
@@ -101,41 +101,41 @@ def analyze_file_structure(file_data):
 
     print(f"  Metadata offsets: {[hex(x) for x in metadata_offsets]}")
 
-    # Find data start - ищем паттерн начала данных
+    # Find data start - look for data beginning pattern
     data_start = None
-    
-    # Попробуем найти паттерн 01 00 00 00 (ID первого элемента)
-    search_start = max(header_size, 0x400)  # начинаем поиск после заголовка
+
+    # Try to find pattern 01 00 00 00 (first item ID)
+    search_start = max(header_size, 0x400)  # start search after header
     search_end = min(search_start + 0x200, len(file_data) - 8)
-    
+
     for i in range(search_start, search_end):
         if file_data[i:i+4] == b'\x01\x00\x00\x00':
             data_start = i
             print(f"  Found data start pattern at: 0x{i:x}")
             break
-    
-    # Если не нашли стандартный паттерн, попробуем альтернативный подход
+
+    # If standard pattern not found, try alternative approach
     if data_start is None:
-        # Попробуем использовать последний offset как начало данных
+        # Try using last offset as data start
         if metadata_offsets:
-            # Найдем максимальный уникальный offset
+            # Find maximum unique offset
             unique_offsets = sorted(list(set(metadata_offsets)))
             if len(unique_offsets) >= 2:
-                # Берем предпоследний уникальный offset как потенциальное начало данных
+                # Take second-to-last unique offset as potential data start
                 potential_start = unique_offsets[-2]
-                # Проверяем, есть ли там разумные данные
+                # Check if there's reasonable data there
                 if potential_start + 8 < len(file_data):
-                    # Проверяем, выглядит ли как ID элемента (разумное число)
+                    # Check if it looks like item ID (reasonable number)
                     potential_id = struct.unpack('<I', file_data[potential_start:potential_start+4])[0]
                     if 1 <= potential_id <= 10000:
                         data_start = potential_start
                         print(f"  Estimated data start from offsets: 0x{potential_start:x}")
-    
+
     if data_start is None:
-        # Последняя попытка - ищем в конце метаданных
+        # Last attempt - search at end of metadata
         if metadata_offsets:
             max_offset = max(metadata_offsets)
-            # Ищем после максимального offset'а
+            # Search after maximum offset
             for i in range(max_offset, min(max_offset + 100, len(file_data) - 8)):
                 if i + 4 <= len(file_data):
                     potential_id = struct.unpack('<I', file_data[i:i+4])[0]
@@ -151,11 +151,11 @@ def analyze_file_structure(file_data):
     sections = []
     prev_offset = header_size
 
-    # Создаем секции из уникальных offset'ов
+    # Create sections from unique offsets
     unique_offsets = sorted(list(set(metadata_offsets)))
-    
+
     for i, offset in enumerate(unique_offsets):
-        if offset > prev_offset:  # Только если offset больше предыдущего
+        if offset > prev_offset:  # Only if offset is greater than previous
             section_size = offset - prev_offset
             sections.append({
                 'index': len(sections) + 1,
@@ -165,7 +165,7 @@ def analyze_file_structure(file_data):
             })
             prev_offset = offset
 
-    # Final metadata section (до начала данных)
+    # Final metadata section (until data start)
     if prev_offset < data_start:
         final_section = {
             'index': len(sections) + 1,
@@ -396,7 +396,7 @@ def update_metadata_pointers(original_data, structure_info, metadata_sections, i
                 section_info = metadata_sections[section_key]
                 updated_metadata += bytes.fromhex(section_info['data'])
             else:
-                # Если секция не найдена, создаем пустую секцию нужного размера
+                # If section not found, create empty section of needed size
                 section_size = section['end'] - section['start']
                 updated_metadata += b'\x00' * section_size
                 print(f"  Warning: Section {section_key} not found, filled with zeros")
@@ -422,14 +422,14 @@ def update_metadata_pointers(original_data, structure_info, metadata_sections, i
 
     for section in structure_info['metadata_sections']:
         section_key = f"section_{section['index']}"
-        
+
         if section_key not in metadata_sections:
-            # Если секция не найдена, создаем пустую секцию нужного размера
+            # If section not found, create empty section of needed size
             section_size = section['end'] - section['start']
             updated_metadata += b'\x00' * section_size
             print(f"  {section_key}: not found, filled with zeros ({section_size} bytes)")
             continue
-            
+
         section_info = metadata_sections[section_key]
         original_bytes = bytes.fromhex(section_info['data'])
         updated_bytes = bytearray(original_bytes)
@@ -444,7 +444,7 @@ def update_metadata_pointers(original_data, structure_info, metadata_sections, i
                 # Check if this is an item pointer we need to update
                 if old_value in position_mapping:
                     new_value = position_mapping[old_value]
-                    # Проверяем, что новое значение помещается в 2 байта
+                    # Check that new value fits in 2 bytes
                     if new_value <= 0xFFFF:
                         struct.pack_into('<H', updated_bytes, i, new_value)
                         updates_count += 1
@@ -548,26 +548,26 @@ def compile_item_db(json_path, item_path):
     # Rebuild header exactly as original with dynamic size
     header_size = data["structure"]["header_size"]
     metadata_offsets = data["structure"]["metadata_offsets"]
-    
+
     print(f"Rebuilding header: {header_size} bytes with {len(metadata_offsets)} offsets")
-    
-    # Проверяем, что размер заголовка соответствует количеству offset'ов
+
+    # Check that header size matches number of offsets
     expected_header_size = 2 + len(metadata_offsets) * 2
     if header_size != expected_header_size:
         print(f"Warning: Header size mismatch. Expected {expected_header_size}, got {header_size}")
         print(f"Using calculated size: {expected_header_size}")
         header_size = expected_header_size
 
-    # Строим заголовок
+    # Build header
     header = struct.pack('<H', header_size)
     for offset in metadata_offsets:
         header += struct.pack('<H', offset)
-    
-    # Добиваем заголовок до нужного размера, если необходимо
+
+    # Pad header to needed size if necessary
     while len(header) < header_size:
         header += b'\x00'
-    
-    # Обрезаем заголовок, если он получился больше нужного
+
+    # Trim header if it became larger than needed
     header = header[:header_size]
 
     print(f"Built header: {len(header)} bytes")
