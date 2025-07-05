@@ -353,7 +353,7 @@ def update_metadata_pointers(original_data, structure_info, metadata_sections, i
     current_pos = data_start
     new_positions = {}
 
-    sorted_items = sorted(items, key=lambda x: x['id'])
+    sorted_items = items #sorted(items, key=lambda x: x['id'])
 
     # Detect if any item sizes changed
     sizes_changed = False
@@ -466,7 +466,7 @@ def build_items_data(items, data_start):
     """Build item entries binary data"""
     print(f"Building items data starting at 0x{data_start:x}")
 
-    sorted_items = sorted(items, key=lambda x: x['id'])
+    sorted_items = items #sorted(items, key=lambda x: x['id'])
 
     # Calculate positions for all items
     encoded_items = []
